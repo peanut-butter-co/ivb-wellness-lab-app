@@ -1,31 +1,41 @@
 query RunInput {
-  presentmentCurrencyRate
-  cart {
-    province_vat_exempt: attribute (key: "province_vat_exempt") {
-      key 
-      value
-    }
-    lines {
-      id
-      quantity
-      cost {
-        totalAmount {
-          amount
-          currencyCode
-        } 
-      }
-      merchandise {
-        __typename
-        ... on ProductVariant {
-          id
-          title
-          product {
-            tax_percentage: metafield (namespace: "tax" key: "percentage") {
-              value
-            }
-          }
-        }
-      }
-    }
-  }
+	presentmentCurrencyRate
+	cart {
+		province_vat_exempt: attribute(key: "province_vat_exempt") {
+			key
+			value
+		}
+		lines {
+			...CartLineFields
+		}
+	}
+}
+
+fragment CartLineFields on CartLine {
+	id
+	quantity
+	cost {
+		totalAmount {
+			amount
+			currencyCode
+		}
+	}
+	pack_id: attribute(key: "_pack_id") {
+		value
+	}
+	pack_type: attribute(key: "_pack_type") {
+		value
+	}
+	merchandise {
+		__typename
+		... on ProductVariant {
+			id
+			title
+			product {
+				tax_percentage: metafield(namespace: "tax", key: "percentage") {
+					value
+				}
+			}
+		}
+	}
 }
