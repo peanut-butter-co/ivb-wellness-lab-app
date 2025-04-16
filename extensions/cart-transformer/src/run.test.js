@@ -52,7 +52,7 @@ describe("cart transform function", () => {
 				lines: [
 					{
 						id: "parent1",
-						quantity: 1,
+						quantity: 2, //better different from 1 to test amount per unit properly
 						pack_id: { value: "bundle1" },
 						pack_type: { value: "parent" },
 						cost: { totalAmount: { amount: "1" } },
@@ -64,7 +64,7 @@ describe("cart transform function", () => {
 					},
 					{
 						id: "child1",
-						quantity: 1,
+						quantity: 3, //better different from 1 to test amount per unit properly
 						pack_id: { value: "bundle1" },
 						pack_type: { value: "child" },
 						cost: { totalAmount: { amount: "50" } },
@@ -84,9 +84,12 @@ describe("cart transform function", () => {
 			"parentvariant1"
 		);
 		expect(result.operations[0].merge.cartLines.length).toBe(2);
-		// Price calculation must be only the price of child
 		expect(result.operations[0].merge.price.percentageDecrease.value).toBe(
-			50
+			// FROM run.js
+			// const linePrice = parseFloat(line.cost.totalAmount.amount || "0");
+			// packTotal = partenCost + linePrice;
+			// percentageDecrease priceAdjustment = 100 * (parentCost / packTotal);
+			100 * (1 / (50 + 1))
 		);
 	});
 
@@ -98,7 +101,7 @@ describe("cart transform function", () => {
 				lines: [
 					{
 						id: "parent1",
-						quantity: 1,
+						quantity: 2,
 						pack_id: { value: "bundle1" },
 						pack_type: { value: "parent" },
 						cost: { totalAmount: { amount: "1" } },
@@ -112,7 +115,7 @@ describe("cart transform function", () => {
 					},
 					{
 						id: "child1",
-						quantity: 1,
+						quantity: 3,
 						pack_id: { value: "bundle1" },
 						pack_type: { value: "child" },
 						cost: { totalAmount: { amount: "118" } },
@@ -120,7 +123,7 @@ describe("cart transform function", () => {
 							__typename: "ProductVariant",
 							product: {
 								tax_percentage: { value: "10" }, //This must NOT be the tax exempted for bundle
-							}
+							},
 						},
 					},
 					{
@@ -145,9 +148,13 @@ describe("cart transform function", () => {
 		const mergeOp = result.operations.find((op) => op.merge);
 		expect(mergeOp).toBeDefined();
 		expect(mergeOp.merge.price.percentageDecrease.value).toBe(
-			100
+			// FROM run.js
+			// const linePrice = parseFloat(line.cost.totalAmount.amount || "0");
+			// packTotal = partenCost + linePrice;
+			// percentageDecrease priceAdjustment = 100 * (parentCost / packTotal);
+            // +Tax exemption: priceAdjustment = priceAdjustment * (1 - parseFloat(taxPercentage) / 100);
+			100 * (1 / (118 + 1)) * (1 - (18) / 100)
 		);
-
 		// Check tax exemption on non-bundled item
 		const taxOp = result.operations.find((op) => op.update);
 		expect(taxOp).toBeDefined();

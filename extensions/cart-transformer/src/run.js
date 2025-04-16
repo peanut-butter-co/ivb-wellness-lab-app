@@ -20,6 +20,11 @@ const NO_CHANGES = {
  * @returns {FunctionRunResult}
  */
 export function run(input) {
+    
+    if (!input?.cart?.lines) {
+        return NO_CHANGES;
+    }
+
 	const performTaxExemption =
 		input?.cart?.province_vat_exempt?.value === "true";
 
