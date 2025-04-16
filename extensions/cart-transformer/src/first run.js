@@ -15,6 +15,9 @@ const NO_CHANGES = {
 	operations: [],
 };
 
+// Cache for parsed pack configs (avoid repeated JSON.parse)
+const packConfigCache = new Map();
+
 /**
  * @param {RunInput} input
  * @returns {FunctionRunResult}
@@ -23,93 +26,81 @@ export function run(input) {
 	const performTaxExemption =
 		input?.cart?.province_vat_exempt?.value === "true";
 
-	let operations = [];
-	const bundles = {};
-	const bundledLineIds = new Set();
-	let hasPackItems = false;
+	const bundles = groupLineItemsInBundle(input.cart.lines);
 
-	// Single-pass cart iteration
-	for (const line of input.cart.lines) {
-		const packId = line.pack_id?.value;
-
-		if (packId) {
-			// Track that we have at least one pack item
-			hasPackItems = true;
-
-			// Group into bundles
-			if (!bundles[packId]) {
-				bundles[packId] = [];
-			}
-			bundles[packId].push(line);
-			bundledLineIds.add(line.id);
-		}
-	}
-
-	if (!hasPackItems && !performTaxExemption) {
+	if (Object.keys(bundles).length === 0 && !performTaxExemption)
 		return NO_CHANGES;
-	}
 
-	// Process bundles
+	let operations = [];
+
+	// Track which lines are part of bundles to avoid double tax exemption
+	const bundledLineIds = new Set();
+
 	for (const packId in bundles) {
 		const bundleLines = bundles[packId];
-		const mergeOp = mergeBundles(bundleLines, performTaxExemption);
+
+		// Track all bundled lines to avoid double-processing
+		bundleLines.forEach((line) => bundledLineIds.add(line.id));
+
+		const mergeOp = isValidBundle(input, bundleLines, performTaxExemption);
+
 		if (mergeOp) {
 			operations.push({ merge: mergeOp });
 		}
 	}
 
-	// Only apply tax exemption if needed and only to non-bundled lines
+	// Only apply tax exemption if needed
 	if (performTaxExemption) {
-		for (const line of input.cart.lines) {
-			if (!bundledLineIds.has(line.id)) {
-				applyTaxExemptionToLine(line, operations);
-			}
-		}
+		// Apply tax exemptions ONLY to non-bundled lines
+		input.cart.lines
+			.filter((line) => !bundledLineIds.has(line.id))
+			.forEach((line) => {
+				let taxDivider = 1.21;
+
+				if (line.merchandise.__typename === "ProductVariant") {
+					const productTaxPercentage =
+						line.merchandise.product.tax_percentage;
+					if (productTaxPercentage?.value) {
+						const taxPercentageNumber = parseFloat(
+							productTaxPercentage.value
+						);
+						if (
+							!isNaN(taxPercentageNumber) &&
+							taxPercentageNumber <= 100
+						) {
+							taxDivider = 1 + taxPercentageNumber / 100;
+						}
+					}
+				}
+
+				operations.push({
+					update: {
+						cartLineId: line.id,
+						price: {
+							adjustment: {
+								fixedPricePerUnit: {
+									amount:
+										line.cost.totalAmount.amount /
+										line.quantity /
+										taxDivider,
+								},
+							},
+						},
+					},
+				});
+			});
 	}
 
 	return operations.length > 0 ? { operations } : NO_CHANGES;
 }
 
 /**
- * @param {CartLineFields} line
- * @param {CartOperation[]} operations
- */
-function applyTaxExemptionToLine(line, operations) {
-	let taxDivider = 1.21;
-
-	if (line.merchandise.__typename === "ProductVariant") {
-		const productTaxPercentage = line.merchandise.product.tax_percentage;
-		if (productTaxPercentage?.value) {
-			const taxPercentageNumber = parseFloat(productTaxPercentage.value);
-			if (!isNaN(taxPercentageNumber) && taxPercentageNumber <= 100) {
-				taxDivider = 1 + taxPercentageNumber / 100;
-			}
-		}
-	}
-
-	operations.push({
-		update: {
-			cartLineId: line.id,
-			price: {
-				adjustment: {
-					fixedPricePerUnit: {
-						amount:
-							line.cost.totalAmount.amount /
-							line.quantity /
-							taxDivider,
-					},
-				},
-			},
-		},
-	});
-}
-
-/**
+ * @param {RunInput} cart
  * @param {CartLineFields[]} bundle
  * @param {boolean} performTaxExemption
  * @returns {MergeOperation|null}
  */
-function mergeBundles(bundle, performTaxExemption) {
+function isValidBundle(cart, bundle, performTaxExemption) {
 	let parent;
 	const childLines = [];
 
@@ -142,7 +133,7 @@ function mergeBundles(bundle, performTaxExemption) {
 		priceAdjustment = 100 * (parentCost / packTotal);
 	}
 
-	// Now apply the tax exemption if needed
+	//Now apply the taxexemption if needed
 	if (performTaxExemption) {
 		const taxPercentage = parent.merchandise.product.tax_percentage?.value;
 		if (taxPercentage) {
@@ -174,4 +165,23 @@ function mergeBundles(bundle, performTaxExemption) {
 	};
 
 	return mergeOperation;
+}
+
+/**
+ * @param {CartLineFields[]} lines
+ */
+function groupLineItemsInBundle(lines) {
+	const bundles = {};
+
+	for (const line of lines) {
+		const packId = line.pack_id?.value;
+		if (packId) {
+			if (!bundles[packId]) {
+				bundles[packId] = [];
+			}
+			bundles[packId].push(line);
+		}
+	}
+
+	return bundles;
 }
