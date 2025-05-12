@@ -152,11 +152,11 @@ function mergeBundles(bundle, performTaxExemption) {
 		const taxPercentage = parent.merchandise.product.tax_percentage?.value;
 		if (taxPercentage) {
 			priceAdjustment =
-				priceAdjustment * (1 - parseFloat(taxPercentage) / 100);
+				priceAdjustment * (1 + (parseFloat(taxPercentage) / 100));
 		}
 	}
 
-	const attributes = [];
+    const attributes = [];
 
 	const mergeOperation = {
 		cartLines: [
