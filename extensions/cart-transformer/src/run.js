@@ -141,20 +141,24 @@ function mergeBundles(bundle, performTaxExemption) {
 		packTotal += linePrice;
 	}
 
-	// Price adjustment so the parent line effectively becomes the full price
-	let priceAdjustment = 100;
-	if (packTotal > 0) {
-		priceAdjustment = 100 * (parentCost / packTotal);
-	}
-
+	let priceAdjustment = 0;
 	// Now apply the tax exemption if needed
 	if (performTaxExemption) {
 		const taxPercentage = parent.merchandise.product.tax_percentage?.value;
 		if (taxPercentage) {
-			priceAdjustment =
-				priceAdjustment * (1 + (parseFloat(taxPercentage) / 100));
+			priceAdjustment = packTotal / (1 + (parseFloat(taxPercentage) / 100));
 		}
 	}
+
+    if (performTaxExemption) {
+        const taxPercentage = parent.merchandise.product.tax_percentage?.value;
+        if (taxPercentage) {
+            const rate = parseFloat(taxPercentage) / 100;
+            // queremos el % de descuento que aplicado a packTotal deja el precio sin IVA
+            // descuento% = (packTotal - packTotal/(1+rate)) / packTotal * 100
+            priceAdjustment = (rate / (1 + rate)) * 100;
+        }
+    }
 
     const attributes = [];
 
